@@ -110,20 +110,20 @@ def export(
     output_path: str = typer.Option(
         "exported_offers.xlsx", "--output", "-o", help="Output file path"
     ),
-    active_only: bool = typer.Option(
-        False, "--active-only", help="Export only active offers"
+    include_inactive: bool = typer.Option(
+        False, "--include-inactive", help="Include inactive offers in export"
     ),
 ) -> None:
     """Export offers to a new file."""
     try:
         database = OfferDatabase(database_path)
 
-        if active_only:
-            offers = database.get_active_offers()
-            console.print(f"Exporting {len(offers)} active offers...")
-        else:
+        if include_inactive:
             offers = database.load_offers()
             console.print(f"Exporting {len(offers)} total offers...")
+        else:
+            offers = database.get_active_offers()
+            console.print(f"Exporting {len(offers)} active offers...")
 
         if offers.empty:
             console.print("[yellow]No offers to export[/yellow]")
