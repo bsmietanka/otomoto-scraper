@@ -48,7 +48,9 @@ class OfferManager:
         self.logger.info(f"Found {len(offer_links)} total offers in search results")
 
         # Step 2: Filter out existing offers to minimize scraping
-        existing_urls = self.database.get_urls_for_search_url(search_url)
+        existing_urls = (
+            self.database.get_all_urls()
+        )  # Get ALL URLs, not just for this search URL
         new_offer_links = [url for url in offer_links if url not in existing_urls]
 
         self.logger.info(
@@ -189,8 +191,10 @@ class OfferManager:
             )
 
         # Update existing offers (mark as seen again)
-        existing_urls = set(self.database.get_urls_for_search_url(search_url))
-        current_existing_urls = [url for url in all_offer_links if url in existing_urls]
+        all_existing_urls = set(self.database.get_all_urls())
+        current_existing_urls = [
+            url for url in all_offer_links if url in all_existing_urls
+        ]
 
         if current_existing_urls:
             # Create a simple dataframe with just URLs for existing offers

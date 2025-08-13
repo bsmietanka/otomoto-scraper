@@ -104,6 +104,15 @@ class OfferDatabase:
         matching_offers = offers[offers["search_url"] == search_url]
         return set(matching_offers["url"].dropna().tolist())
 
+    def get_all_urls(self) -> set[str]:
+        """Get all URLs in the database regardless of search URL.
+
+        Returns:
+            Set of all offer URLs in the database
+        """
+        offers = self.load_offers()
+        return set(offers["url"].dropna().tolist())
+
     def mark_inactive(self, offer_urls: list[str], search_url: str) -> int:
         """Mark offers as inactive if they're not in current search results.
 
@@ -147,21 +156,36 @@ class OfferDatabase:
         if new_offers.empty:
             return 0
 
+        # Load existing offers first
+        existing_offers = self.load_offers()
+        existing_urls = set(existing_offers["url"].dropna().tolist())
+
+        # Filter out offers that already exist in database (by URL)
+        new_urls = set(new_offers["url"].dropna().tolist())
+        truly_new_urls = new_urls - existing_urls
+
+        if not truly_new_urls:
+            self.logger.info("No truly new offers to add (all URLs already exist)")
+            return 0
+
+        # Keep only offers with truly new URLs
+        filtered_new_offers = new_offers[new_offers["url"].isin(truly_new_urls)].copy()
+
         # Add metadata
         now = datetime.now()
-        new_offers = new_offers.copy()
-        new_offers["first_seen"] = now
-        new_offers["last_seen"] = now
-        new_offers["is_active"] = True
-        new_offers["search_url"] = search_url
+        filtered_new_offers["first_seen"] = now
+        filtered_new_offers["last_seen"] = now
+        filtered_new_offers["is_active"] = True
+        filtered_new_offers["search_url"] = search_url
 
-        # Load existing and append new ones
-        existing_offers = self.load_offers()
-        combined_offers = pd.concat([existing_offers, new_offers], ignore_index=True)
+        # Append to existing offers
+        combined_offers = pd.concat(
+            [existing_offers, filtered_new_offers], ignore_index=True
+        )
 
         self.save_offers(combined_offers)
-        self.logger.info(f"Added {len(new_offers)} new offers")
-        return len(new_offers)
+        self.logger.info(f"Added {len(filtered_new_offers)} new offers")
+        return len(filtered_new_offers)
 
     def update_existing_offers(self, updated_offers: DataFrame) -> int:
         """Update last_seen timestamp for existing offers.
@@ -246,3 +270,46 @@ class OfferDatabase:
             "inactive_offers": inactive_count,
             "search_urls": search_urls,
         }
+
+    def remove_duplicates(self) -> int:
+        """Remove duplicate offers keeping the best one for each URL.
+
+        Priority order:
+        1. Active entries over inactive ones
+        2. Most recent last_seen date among entries with same activity status
+
+        Returns:
+            Number of duplicate entries removed
+        """
+        offers = self.load_offers()
+
+        if offers.empty:
+            return 0
+
+        original_count = len(offers)
+
+        # Sort by URL, then by is_active descending (True first), then by last_seen descending
+        # This ensures that for each URL, active entries come first, and among those, most recent first
+        offers_sorted = offers.sort_values(
+            ["url", "is_active", "last_seen"], ascending=[True, False, False]
+        )
+
+        # Keep first entry for each URL (which will be active and most recent due to sorting)
+        offers_deduplicated = offers_sorted.drop_duplicates(
+            subset=["url"], keep="first"
+        )
+
+        # Sort back by last_seen descending for consistent output
+        offers_final = offers_deduplicated.sort_values("last_seen", ascending=False)
+
+        duplicates_removed = original_count - len(offers_final)
+
+        if duplicates_removed > 0:
+            self.save_offers(offers_final)
+            self.logger.info(
+                f"Removed {duplicates_removed} duplicate entries, prioritizing active entries"
+            )
+        else:
+            self.logger.info("No duplicates found to remove")
+
+        return duplicates_removed

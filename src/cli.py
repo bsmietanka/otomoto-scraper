@@ -103,6 +103,51 @@ def stats(
 
 
 @app.command()
+def cleanup(
+    database_path: str = typer.Option(
+        "offers.xlsx", "--db", "-d", help="Path to the database file"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would be removed without actually removing"
+    ),
+) -> None:
+    """Remove duplicate offers from the database."""
+    try:
+        database = OfferDatabase(database_path)
+
+        if dry_run:
+            # For dry run, just show what would be removed
+            offers = database.load_offers()
+            if offers.empty:
+                console.print("[yellow]Database is empty, nothing to clean up[/yellow]")
+                return
+
+            duplicated_urls = offers[offers["url"].duplicated(keep=False)]
+            if duplicated_urls.empty:
+                console.print("[green]No duplicates found to remove[/green]")
+            else:
+                duplicate_count = len(duplicated_urls) - len(
+                    duplicated_urls["url"].unique()
+                )
+                console.print(
+                    f"[yellow]Dry run: Would remove {duplicate_count} duplicate entries[/yellow]"
+                )
+        else:
+            # Actually remove duplicates
+            removed_count = database.remove_duplicates()
+            if removed_count > 0:
+                console.print(
+                    f"[green]✓ Removed {removed_count} duplicate entries[/green]"
+                )
+            else:
+                console.print("[green]✓ No duplicates found to remove[/green]")
+
+    except Exception as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
+        raise typer.Exit(1) from e
+
+
+@app.command()
 def verify(
     database_path: str = typer.Option(
         "offers.xlsx", "--db", "-d", help="Path to the database file"
