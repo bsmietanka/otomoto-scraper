@@ -103,6 +103,78 @@ def stats(
 
 
 @app.command()
+def verify(
+    database_path: str = typer.Option(
+        "offers.xlsx", "--db", "-d", help="Path to the database file"
+    ),
+) -> None:
+    """Verify database integrity by checking for duplicate URLs."""
+    try:
+        database = OfferDatabase(database_path)
+        offers = database.load_offers()
+
+        if offers.empty:
+            console.print("[yellow]Database is empty, nothing to verify[/yellow]")
+            return
+
+        # Check for duplicate URLs
+        duplicated_urls = offers[offers["url"].duplicated(keep=False)]
+
+        if duplicated_urls.empty:
+            console.print("[green]✓ No duplicate URLs found in database[/green]")
+            console.print(f"Verified {len(offers)} unique offers")
+        else:
+            # Group duplicates by URL
+            duplicate_groups = duplicated_urls.groupby("url")
+
+            console.print(
+                f"[red]✗ Found {len(duplicate_groups)} URLs with duplicates[/red]"
+            )
+
+            # Create table showing duplicates
+            table = Table(title="Duplicate URLs Found")
+            table.add_column("URL", style="cyan", no_wrap=False)
+            table.add_column("Count", style="red", justify="right")
+            table.add_column("First Seen", style="yellow")
+            table.add_column("Last Seen", style="yellow")
+
+            for url, group in duplicate_groups:
+                count = len(group)
+                first_seen = (
+                    group["first_seen"].min()
+                    if "first_seen" in group.columns
+                    else "N/A"
+                )
+                last_seen = (
+                    group["last_seen"].max() if "last_seen" in group.columns else "N/A"
+                )
+
+                # Truncate long URLs for display
+                url_str = str(url)
+                display_url = url_str[:80] + "..." if len(url_str) > 80 else url_str
+                table.add_row(display_url, str(count), str(first_seen), str(last_seen))
+
+            console.print(table)
+
+            # Show summary
+            total_duplicates = len(duplicated_urls)
+            console.print("\n[yellow]Summary:[/yellow]")
+            console.print(f"Total offers: {len(offers)}")
+            console.print(f"Duplicate entries: {total_duplicates}")
+            console.print(
+                f"Unique URLs: {len(offers) - total_duplicates + len(duplicate_groups)}"
+            )
+
+            console.print(
+                "\n[blue]Tip:[/blue] You may want to clean up these duplicates manually"
+            )
+
+    except Exception as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
+        raise typer.Exit(1) from e
+
+
+@app.command()
 def export(
     database_path: str = typer.Option(
         "offers.xlsx", "--db", "-d", help="Path to the database file"
