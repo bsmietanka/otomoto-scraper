@@ -15,9 +15,7 @@ class CarPricingModel:
         """Initialize the pricing model."""
         self.model = LinearRegression()
         self.scaler = StandardScaler()
-        self.onehot_encoder = OneHotEncoder(
-            sparse_output=False, handle_unknown="ignore"
-        )
+        self.onehot_encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
         self.feature_columns = []
         self.categorical_feature_names = []
         self.brand_model_avg_prices = {}
@@ -78,16 +76,12 @@ class CarPricingModel:
         data["price"] = data["Cena"].apply(self._parse_price)
         data["year"] = pd.to_numeric(data["Rok produkcji"], errors="coerce")
         data["mileage"] = data["Przebieg"].apply(self._parse_mileage)
-        data["engine_capacity"] = data["Pojemność skokowa"].apply(
-            self._parse_engine_capacity
-        )
+        data["engine_capacity"] = data["Pojemność skokowa"].apply(self._parse_engine_capacity)
         data["power"] = data["Moc"].apply(self._parse_power)
 
         # Calculate derived features
         data["age"] = 2025 - data["year"]
-        data["mileage_per_year"] = data["mileage"] / (
-            data["age"] + 1
-        )  # Avoid division by zero
+        data["mileage_per_year"] = data["mileage"] / (data["age"] + 1)  # Avoid division by zero
 
         # Create brand_model combination for relative pricing
         data["brand_model"] = data["Marka pojazdu"] + "_" + data["Model pojazdu"]
@@ -119,9 +113,7 @@ class CarPricingModel:
         # Ensure lower bound is not negative
         lower_bound = max(0, lower_bound)
 
-        outlier_mask = (data_clean["price"] >= lower_bound) & (
-            data_clean["price"] <= upper_bound
-        )
+        outlier_mask = (data_clean["price"] >= lower_bound) & (data_clean["price"] <= upper_bound)
 
         n_before_outliers = len(data_clean)
         data_clean = data_clean[outlier_mask].copy()
@@ -138,15 +130,11 @@ class CarPricingModel:
         if len(data_clean) == 0:
             raise ValueError("No valid data found after outlier filtering")
 
-        self.logger.info(
-            f"Prepared {len(data_clean)} valid offers from {len(df)} total"
-        )
+        self.logger.info(f"Prepared {len(data_clean)} valid offers from {len(df)} total")
 
         return data_clean
 
-    def _encode_categorical_features(
-        self, data: pd.DataFrame, fit: bool = True
-    ) -> pd.DataFrame:
+    def _encode_categorical_features(self, data: pd.DataFrame, fit: bool = True) -> pd.DataFrame:
         """Encode categorical features using OneHotEncoder."""
         categorical_features = [
             "Marka pojazdu",
@@ -157,11 +145,6 @@ class CarPricingModel:
 
         # Prepare categorical data
         categorical_data = data[categorical_features].copy()
-
-        # Fill missing values
-        for feature in categorical_features:
-            if feature in categorical_data.columns:
-                categorical_data[feature] = categorical_data[feature].fillna("Unknown")
 
         if fit:
             # Fit the encoder and transform
@@ -189,9 +172,7 @@ class CarPricingModel:
         data_with_targets = data.copy()
 
         # Calculate average price for each brand_model combination
-        brand_model_stats = (
-            data.groupby("brand_model").agg({"price": ["mean", "count"]}).round(0)
-        )
+        brand_model_stats = data.groupby("brand_model").agg({"price": ["mean", "count"]}).round(0)
 
         # Only use brand_model combinations with at least 3 cars for reliable averages
         min_samples = 3
@@ -208,35 +189,13 @@ class CarPricingModel:
 
         # For combinations with enough data, use their average
         # For others, use overall brand average, then overall average
-        data_with_targets["expected_price"] = 0.0
-
-        for idx, row in data_with_targets.iterrows():
-            brand_model = row["brand_model"]
-            brand = row["Marka pojazdu"]
-
-            if brand_model in self.brand_model_avg_prices:
-                # Use brand_model average
-                data_with_targets.loc[idx, "expected_price"] = (
-                    self.brand_model_avg_prices[brand_model]
-                )
-            else:
-                # Fallback to brand average
-                brand_data = data[data["Marka pojazdu"] == brand]
-                if len(brand_data) >= 5:
-                    data_with_targets.loc[idx, "expected_price"] = brand_data[
-                        "price"
-                    ].mean()
-                else:
-                    # Use overall average
-                    data_with_targets.loc[idx, "expected_price"] = data["price"].mean()
+        data_with_targets["avg_price"] = data_with_targets["brand_model"].map(
+            self.brand_model_avg_prices
+        )
 
         # Calculate relative price (ratio to expected price)
         data_with_targets["price_ratio"] = (
-            data_with_targets["price"] / data_with_targets["expected_price"]
-        )
-
-        self.logger.info(
-            f"Created relative price targets for {len(self.brand_model_avg_prices)} brand/model combinations"
+            data_with_targets["price"] / data_with_targets["avg_price"]
         )
 
         return data_with_targets
