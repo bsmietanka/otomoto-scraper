@@ -29,7 +29,6 @@ class OfferManager:
         self.database = database
         self.num_workers = num_workers
         self.pause = pause_between_requests
-        self.logger = logging.getLogger(__name__)
 
     def update_offers(self, search_url: str) -> dict:
         """Update offers for a given search URL.
@@ -40,20 +39,18 @@ class OfferManager:
         Returns:
             Dictionary with update statistics
         """
-        self.logger.info(f"Starting offer update for: {search_url}")
+        logging.info(f"Starting offer update for: {search_url}")
         start_time = datetime.now()
 
         # Step 1: Get all offer links from search results
         offer_links = self._get_all_offer_links(search_url)
-        self.logger.info(f"Found {len(offer_links)} total offers in search results")
+        logging.info(f"Found {len(offer_links)} total offers in search results")
 
         # Step 2: Filter out existing offers to minimize scraping
-        existing_urls = (
-            self.database.get_all_urls()
-        )  # Get ALL URLs, not just for this search URL
+        existing_urls = self.database.get_all_urls()  # Get ALL URLs, not just for this search URL
         new_offer_links = [url for url in offer_links if url not in existing_urls]
 
-        self.logger.info(
+        logging.info(
             f"Found {len(new_offer_links)} new offers "
             f"({len(offer_links) - len(new_offer_links)} already in database)"
         )
@@ -64,16 +61,14 @@ class OfferManager:
             scraped_offers = self._scrape_offers(new_offer_links)
 
         # Step 4: Update database
-        stats = self._update_database(
-            search_url, offer_links, scraped_offers, new_offer_links
-        )
+        stats = self._update_database(search_url, offer_links, scraped_offers, new_offer_links)
 
         # Calculate timing
         duration = datetime.now() - start_time
         stats["duration_seconds"] = duration.total_seconds()
         stats["search_url"] = search_url
 
-        self.logger.info(f"Update completed in {duration.total_seconds():.1f} seconds")
+        logging.info(f"Update completed in {duration.total_seconds():.1f} seconds")
         return stats
 
     def _get_all_offer_links(self, search_url: str) -> list[str]:
@@ -90,7 +85,7 @@ class OfferManager:
         num_pages_list = pages_scraper.scrape([search_url], progress=False)
         num_pages = num_pages_list[0] if num_pages_list else 1
 
-        self.logger.info(f"Search has {num_pages} pages")
+        logging.info(f"Search has {num_pages} pages")
 
         # Generate page URLs
         page_links = self._generate_page_urls(search_url, num_pages)
@@ -141,7 +136,7 @@ class OfferManager:
         if not offer_links:
             return []
 
-        self.logger.info(f"Scraping {len(offer_links)} new offers...")
+        logging.info(f"Scraping {len(offer_links)} new offers...")
         offers_scraper = Scraper(get_offer, self.num_workers, self.pause)
         scraped_offers = offers_scraper.scrape(offer_links)
 
@@ -152,9 +147,9 @@ class OfferManager:
                 offer["url"] = url
                 valid_offers.append(offer)
             else:
-                self.logger.warning(f"Failed to scrape offer: {url}")
+                logging.warning(f"Failed to scrape offer: {url}")
 
-        self.logger.info(f"Successfully scraped {len(valid_offers)} offers")
+        logging.info(f"Successfully scraped {len(valid_offers)} offers")
         return valid_offers
 
     def _update_database(
@@ -186,15 +181,11 @@ class OfferManager:
         # Add new offers to database
         if scraped_offers:
             new_offers_df = pd.DataFrame(scraped_offers)
-            stats["new_offers"] = self.database.add_new_offers(
-                new_offers_df, search_url
-            )
+            stats["new_offers"] = self.database.add_new_offers(new_offers_df, search_url)
 
         # Update existing offers (mark as seen again)
         all_existing_urls = set(self.database.get_all_urls())
-        current_existing_urls = [
-            url for url in all_offer_links if url in all_existing_urls
-        ]
+        current_existing_urls = [url for url in all_offer_links if url in all_existing_urls]
 
         if current_existing_urls:
             # Create a simple dataframe with just URLs for existing offers
@@ -202,9 +193,7 @@ class OfferManager:
             stats["updated_offers"] = self.database.update_existing_offers(existing_df)
 
         # Mark offers not found in current search as inactive
-        stats["inactive_offers"] = self.database.mark_inactive(
-            all_offer_links, search_url
-        )
+        stats["inactive_offers"] = self.database.mark_inactive(all_offer_links, search_url)
 
         return stats
 
@@ -215,17 +204,3 @@ class OfferManager:
             Dictionary with database statistics
         """
         return self.database.get_stats()
-
-    def cleanup_old_offers(self, days_inactive: int = 30) -> int:
-        """Remove offers that have been inactive for a specified period.
-
-        Args:
-            days_inactive: Number of days an offer should be inactive before removal
-
-        Returns:
-            Number of offers removed
-        """
-        # This could be implemented later if needed
-        # For now, we keep all offers for historical analysis
-        self.logger.info("Cleanup not implemented yet - keeping all historical data")
-        return 0

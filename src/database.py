@@ -18,7 +18,6 @@ class OfferDatabase:
             db_path: Path to the XLSX database file
         """
         self.db_path = Path(db_path)
-        self.logger = logging.getLogger(__name__)
 
     def load_offers(self) -> DataFrame:
         """Load existing offers from the database.
@@ -27,14 +26,12 @@ class OfferDatabase:
             DataFrame with existing offers, empty if file doesn't exist
         """
         if not self.db_path.exists():
-            self.logger.info(
-                f"Database file {self.db_path} doesn't exist, starting fresh"
-            )
+            logging.info(f"Database file {self.db_path} doesn't exist, starting fresh")
             return self._create_empty_dataframe()
 
         try:
             df = pd.read_excel(self.db_path, engine="openpyxl")
-            self.logger.info(f"Loaded {len(df)} offers from {self.db_path}")
+            logging.info(f"Loaded {len(df)} offers from {self.db_path}")
 
             # Ensure required columns exist
             required_columns = [
@@ -58,7 +55,7 @@ class OfferDatabase:
             return df
 
         except Exception as e:
-            self.logger.error(f"Error loading database: {e}")
+            logging.error(f"Error loading database: {e}")
             # Return empty dataframe if loading fails
             return self._create_empty_dataframe()
 
@@ -76,10 +73,10 @@ class OfferDatabase:
             offers_sorted = offers.sort_values("last_seen", ascending=False)
 
             offers_sorted.to_excel(self.db_path, index=False, engine="openpyxl")
-            self.logger.info(f"Saved {len(offers_sorted)} offers to {self.db_path}")
+            logging.info(f"Saved {len(offers_sorted)} offers to {self.db_path}")
 
         except Exception as e:
-            self.logger.error(f"Error saving database: {e}")
+            logging.error(f"Error saving database: {e}")
             raise
 
     def get_active_offers(self) -> DataFrame:
@@ -138,7 +135,7 @@ class OfferDatabase:
             offers.loc[mask, "last_seen"] = datetime.now()
 
             self.save_offers(offers)
-            self.logger.info(f"Marked {len(missing_urls)} offers as inactive")
+            logging.info(f"Marked {len(missing_urls)} offers as inactive")
             return len(missing_urls)
 
         return 0
@@ -165,7 +162,7 @@ class OfferDatabase:
         truly_new_urls = new_urls - existing_urls
 
         if not truly_new_urls:
-            self.logger.info("No truly new offers to add (all URLs already exist)")
+            logging.info("No truly new offers to add (all URLs already exist)")
             return 0
 
         # Keep only offers with truly new URLs
@@ -179,12 +176,10 @@ class OfferDatabase:
         filtered_new_offers["search_url"] = search_url
 
         # Append to existing offers
-        combined_offers = pd.concat(
-            [existing_offers, filtered_new_offers], ignore_index=True
-        )
+        combined_offers = pd.concat([existing_offers, filtered_new_offers], ignore_index=True)
 
         self.save_offers(combined_offers)
-        self.logger.info(f"Added {len(filtered_new_offers)} new offers")
+        logging.info(f"Added {len(filtered_new_offers)} new offers")
         return len(filtered_new_offers)
 
     def update_existing_offers(self, updated_offers: DataFrame) -> int:
@@ -209,7 +204,7 @@ class OfferDatabase:
 
         self.save_offers(existing_offers)
         updated_count = mask.sum()
-        self.logger.info(f"Updated {updated_count} existing offers")
+        logging.info(f"Updated {updated_count} existing offers")
         return updated_count
 
     def _create_empty_dataframe(self) -> DataFrame:
@@ -295,9 +290,7 @@ class OfferDatabase:
         )
 
         # Keep first entry for each URL (which will be active and most recent due to sorting)
-        offers_deduplicated = offers_sorted.drop_duplicates(
-            subset=["url"], keep="first"
-        )
+        offers_deduplicated = offers_sorted.drop_duplicates(subset=["url"], keep="first")
 
         # Sort back by last_seen descending for consistent output
         offers_final = offers_deduplicated.sort_values("last_seen", ascending=False)
@@ -306,10 +299,10 @@ class OfferDatabase:
 
         if duplicates_removed > 0:
             self.save_offers(offers_final)
-            self.logger.info(
+            logging.info(
                 f"Removed {duplicates_removed} duplicate entries, prioritizing active entries"
             )
         else:
-            self.logger.info("No duplicates found to remove")
+            logging.info("No duplicates found to remove")
 
         return duplicates_removed

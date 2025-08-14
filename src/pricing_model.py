@@ -3,6 +3,7 @@
 import logging
 import re
 
+import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -19,7 +20,6 @@ class CarPricingModel:
         self.feature_columns = []
         self.categorical_feature_names = []
         self.brand_model_avg_prices = {}
-        self.logger = logging.getLogger(__name__)
 
     def _parse_price(self, price_str: str) -> float:
         """Parse price string like '26 900' or '22 999,99' to numeric value."""
@@ -119,10 +119,10 @@ class CarPricingModel:
         data_clean = data_clean[outlier_mask].copy()
         n_after_outliers = len(data_clean)
 
-        self.logger.info(
+        logging.info(
             f"Conservative IQR outlier filtering: Q1={Q1:,.0f}, Q3={Q3:,.0f}, IQR={IQR:,.0f}"
         )
-        self.logger.info(
+        logging.info(
             f"Filtered out {n_before_outliers - n_after_outliers} price outliers "
             f"(< {lower_bound:,.0f} PLN or > {upper_bound:,.0f} PLN)"
         )
@@ -130,7 +130,7 @@ class CarPricingModel:
         if len(data_clean) == 0:
             raise ValueError("No valid data found after outlier filtering")
 
-        self.logger.info(f"Prepared {len(data_clean)} valid offers from {len(df)} total")
+        logging.info(f"Prepared {len(data_clean)} valid offers from {len(df)} total")
 
         return data_clean
 
@@ -148,18 +148,18 @@ class CarPricingModel:
 
         if fit:
             # Fit the encoder and transform
-            encoded_array = self.onehot_encoder.fit_transform(categorical_data)
+            encoded_array: np.ndarray = self.onehot_encoder.fit_transform(categorical_data)
             # Store feature names for later use
             self.categorical_feature_names = self.onehot_encoder.get_feature_names_out(
                 categorical_features
             )
         else:
             # Transform using fitted encoder
-            encoded_array = self.onehot_encoder.transform(categorical_data)
+            encoded_array: np.ndarray = self.onehot_encoder.transform(categorical_data)
 
         # Create DataFrame with encoded features
         encoded_df = pd.DataFrame(
-            encoded_array, columns=self.categorical_feature_names, index=data.index
+            data=encoded_array, columns=self.categorical_feature_names, index=data.index
         )
 
         # Combine with original data (keeping original categorical columns for later use)
@@ -210,6 +210,7 @@ class CarPricingModel:
 
         # Calculate relative price targets
         data_with_targets = self._calculate_relative_price_targets(encoded_data)
+        data_with_targets = data_with_targets.dropna(subset=["avg_price", "price_ratio"])
 
         # Select features for modeling
         # Numerical features
@@ -259,7 +260,7 @@ class CarPricingModel:
             "price_ratio_std": y.std(),
         }
 
-        self.logger.info(f"Trained model: R² = {r2:.3f}, RMSE = {rmse:.3f}")
+        logging.info(f"Trained model: R² = {r2:.3f}, RMSE = {rmse:.3f}")
 
         return results
 
@@ -302,7 +303,7 @@ class CarPricingModel:
         # Create results dataframe
         results = data.copy()
         results["predicted_ratio"] = predicted_ratios
-        results["predicted_price"] = results["expected_price"] * predicted_ratios
+        results["predicted_price"] = results["avg_price"] * predicted_ratios
         results["actual_ratio"] = actual_ratios
         results["ratio_difference"] = ratio_difference
         results["value_score"] = value_score

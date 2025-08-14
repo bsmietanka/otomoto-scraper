@@ -34,14 +34,14 @@ def get_offer_links_on_page(url: str) -> list[str]:
             page_content = res.text
             break
         except httpx.HTTPStatusError as e:
-            logging.error("HTTP error: %s", e)
+            logging.info("HTTP error: %s", e)
             continue
         except httpx.RequestError as e:
-            logging.error("Request error: %s", e)
+            logging.info("Request error: %s", e)
             continue
 
     if page_content is None:
-        logging.error("Failed to fetch page content after retries.")
+        logging.info("Failed to fetch page content after retries.")
         return []
 
     soup = BeautifulSoup(page_content, features="lxml")
@@ -56,7 +56,7 @@ def get_offer_links_on_page(url: str) -> list[str]:
             if "featured-dealer" not in banner.get("data-testid", "")
         ]
     except Exception:
-        logging.exception("Failed to find car links section on page %s", url)
+        logging.info("Failed to find car links section on page %s", url)
         return []
 
     links = []
@@ -66,7 +66,7 @@ def get_offer_links_on_page(url: str) -> list[str]:
             link = section.find("a", href=True)["href"]
             links.append(link)
         except Exception as e:
-            logging.warning("Error extracting link: %s", e)
+            logging.info("Error extracting link: %s", e)
 
     logging.info("Found %s links", len(links))
     return links
@@ -96,7 +96,7 @@ def get_offer(link: str) -> dict:
         try:
             features.update(fetcher(soup))
         except Exception:
-            logging.exception(f"Error fetching features with {fetcher.__name__}")
+            logging.info(f"Error fetching features with {fetcher.__name__}")
 
     return features
 
@@ -154,9 +154,7 @@ def _get_offer_title(soup) -> dict[str, str]:
 
 def _get_price_details(soup) -> dict[str, str]:
     features = {}
-    price_details_tag = soup.find(
-        "div", attrs={"data-testid": "small-price-evaluation-indicator"}
-    )
+    price_details_tag = soup.find("div", attrs={"data-testid": "small-price-evaluation-indicator"})
     features["Szczegóły ceny"] = price_details_tag.text.strip()
     return features
 
